@@ -49,6 +49,34 @@ async function initExcel() {
   }
 }
 
+// Фойдаланувчи аввал рўйхатдан ўтганини текшириш функсияси
+async function isAlreadyRegistered(userId) {
+  try {
+    if (!fs.existsSync(EXCEL_PATH)) return false;
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(EXCEL_PATH);
+    const worksheet = workbook.getWorksheet('Волонтёрлар');
+
+    if (!worksheet) return false;
+
+    let found = false;
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) { // Сарлавҳа қаторини ўтказиб юборамиз
+        const cellValue = row.getCell(1).value;
+        if (cellValue && String(cellValue) === String(userId)) {
+          found = true;
+        }
+      }
+    });
+
+    return found;
+  } catch (err) {
+    console.error('Текширишда хатолик:', err);
+    return false;
+  }
+}
+
 const bot = new Telegraf(BOT_TOKEN);
 
 // Админ учун Excel юклаб олиш
@@ -87,6 +115,17 @@ bot.command('admin', async (ctx) => {
 bot.start(async (ctx) => {
   await initExcel();
   const userId = ctx.from.id;
+
+  // 1. Биринчи навбатда такрорий рўйхатдан ўтишни текширамиз
+  const registered = await isAlreadyRegistered(userId);
+  if (registered) {
+    return ctx.reply(
+      '✅ **Сиз аллақачон волонтёрлар рўйхатидан ўтгансиз!**\n\n' +
+      '🤝 Аризангиз қабул қилинган. Тез орада сиз билан боғланамиз!',
+      Markup.removeKeyboard()
+    );
+  }
+
   userState[userId] = { step: 'NAME', data: {} };
 
   await ctx.reply(
@@ -102,8 +141,15 @@ bot.on('message', async (ctx) => {
   const userId = ctx.from.id;
   const text = ctx.message?.text;
 
-  // Агар команда ёзилса ёки сессия бўлмаса
+  // Агар команда ёзилса
   if (text?.startsWith('/')) return;
+
+  // Текшириш: Агар фойдаланувчи аллақачон базада бўлса
+  const registered = await isAlreadyRegistered(userId);
+  if (registered) {
+    delete userState[userId];
+    return ctx.reply('✅ Сиз аллақачон рўйхатдан ўтгансиз!');
+  }
 
   if (!userState[userId]) {
     userState[userId] = { step: 'NAME', data: {} };
