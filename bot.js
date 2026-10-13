@@ -26,7 +26,6 @@ const NEIGHBORHOODS = [
   'Марказий МФЙ'
 ];
 
-// Фойдаланувчилар хотираси (Сессия)
 const userState = {};
 
 async function initExcel() {
@@ -45,41 +44,35 @@ async function initExcel() {
       await workbook.xlsx.writeFile(EXCEL_PATH);
     }
   } catch (err) {
-    console.error('Excel файл яратишда хатолик:', err);
+    console.error('Excel яратишда хатолик:', err);
   }
 }
 
-// Фойдаланувчи аввал рўйхатдан ўтганини текшириш функсияси
 async function isAlreadyRegistered(userId) {
   try {
     if (!fs.existsSync(EXCEL_PATH)) return false;
-
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(EXCEL_PATH);
     const worksheet = workbook.getWorksheet('Волонтёрлар');
-
     if (!worksheet) return false;
 
     let found = false;
     worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber > 1) { // Сарлавҳа қаторини ўтказиб юборамиз
+      if (rowNumber > 1) {
         const cellValue = row.getCell(1).value;
         if (cellValue && String(cellValue) === String(userId)) {
           found = true;
         }
       }
     });
-
     return found;
   } catch (err) {
-    console.error('Текширишда хатолик:', err);
     return false;
   }
 }
 
 const bot = new Telegraf(BOT_TOKEN);
 
-// Админ учун Excel юклаб олиш
 const sendExcelFile = async (ctx) => {
   if (ctx.from.id !== ADMIN_ID) {
     return ctx.reply('⛔ Кечирасиз, бу буйруқ фақат админ учун!');
@@ -111,12 +104,10 @@ bot.command('admin', async (ctx) => {
   );
 });
 
-// /start буйруғи
 bot.start(async (ctx) => {
   await initExcel();
   const userId = ctx.from.id;
 
-  // 1. Биринчи навбатда такрорий рўйхатдан ўтишни текширамиз
   const registered = await isAlreadyRegistered(userId);
   if (registered) {
     return ctx.reply(
@@ -136,15 +127,12 @@ bot.start(async (ctx) => {
   );
 });
 
-// Барча хабарларга кетма-кет ишлов бериш
 bot.on('message', async (ctx) => {
   const userId = ctx.from.id;
   const text = ctx.message?.text;
 
-  // Агар команда ёзилса
   if (text?.startsWith('/')) return;
 
-  // Текшириш: Агар фойдаланувчи аллақачон базада бўлса
   const registered = await isAlreadyRegistered(userId);
   if (registered) {
     delete userState[userId];
@@ -160,7 +148,6 @@ bot.on('message', async (ctx) => {
 
   const state = userState[userId];
 
-  // 1-БОСҚИЧ: Исм ва Фамилия
   if (state.step === 'NAME') {
     if (!text) {
       return ctx.reply('⚠️ Илтимос, исм ва фамилиянгизни матн шаклида киритинг!\n\nМасалан: Жасур Уразбаев');
@@ -175,7 +162,6 @@ bot.on('message', async (ctx) => {
     );
   }
 
-  // 2-БОСҚИЧ: Ёш
   if (state.step === 'AGE') {
     const age = parseInt(text, 10);
     if (isNaN(age) || age < 14 || age > 30) {
@@ -202,7 +188,6 @@ bot.on('message', async (ctx) => {
     );
   }
 
-  // 3-БОСҚИЧ: Маҳалла
   if (state.step === 'NEIGHBORHOOD') {
     if (!text || !NEIGHBORHOODS.includes(text)) {
       return ctx.reply('⚠️ Илтимос, маҳаллангизни пастдаги тугмалардан бирини босиб танланг!');
@@ -220,7 +205,6 @@ bot.on('message', async (ctx) => {
     );
   }
 
-  // 4-БОСҚИЧ: Телефон рақам ва Excel-га сақлаш
   if (state.step === 'PHONE') {
     let phone = '';
 
@@ -279,7 +263,6 @@ initExcel().then(() => {
   console.log('Бот муваффақиятли ишга тушди!');
 });
 
-// Render учун веб-сервер
 const PORT = process.env.PORT || 10000;
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
