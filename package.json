@@ -1,7 +1,6 @@
 {
   "name": "volontyor_bot",
   "version": "1.0.0",
-  "description": "Takhiatash volontyorlar boti",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
