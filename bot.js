@@ -46,15 +46,14 @@ async function initExcel() {
   }
 }
 
-// Рўйхатдан ўтиш сўровномаси
+// Босқичма-босқич рўйхатдан ўтиш сценарийси
 const registerWizard = new Scenes.WizardScene(
   'REGISTER_WIZARD',
-  
-  // 1-қадам: Исм-фамилияни қабул қилиш
+
+  // 1-қадам: Исм-фамилияни қабул қилиш ва ёшни сўраш
   async (ctx) => {
     const text = ctx.message?.text;
-    
-    // Агар буйруқ юборилса, сценарийдан чиқамиз
+
     if (text?.startsWith('/')) {
       return ctx.scene.leave();
     }
@@ -67,12 +66,12 @@ const registerWizard = new Scenes.WizardScene(
     ctx.wizard.state.data = { name: text };
     await ctx.reply(
       `Хурсандмиз, ${text}!\n\n` +
-      'Ёшингизни киритинг (волонтёрлик учун 14 дан 30 ёшгача бўлиши керак):'
+      '🎂 Ёшингизни киритинг (волонтёрлик учун 14 дан 30 ёшгача бўлиши керак):'
     );
     return ctx.wizard.next();
   },
 
-  // 2-қадам: Ёш
+  // 2-қадам: Ёшни қабул қилиш ва маҳаллани сўраш
   async (ctx) => {
     const text = ctx.message?.text;
     if (text?.startsWith('/')) {
@@ -82,8 +81,8 @@ const registerWizard = new Scenes.WizardScene(
     const age = parseInt(text, 10);
     if (isNaN(age) || age < 14 || age > 30) {
       await ctx.reply(
-        'Кечирасиз! Волонтёрлик сўровномасида фақат 14 дан 30 ёшгача бўлган ёшлар қатнаша олади.\n\n' +
-        'Илтимос, ёшингизни рақамларда тўғри киритинг (14-30):'
+        '🚫 Кечирасиз! Волонтёрлик сўровномасида фақат 14 дан 30 ёшгача бўлган ёшлар қатнаша олади.\n\n' +
+        '🔢 Илтимос, ёшингизни рақамларда тўғри киритинг (14-30):'
       );
       return;
     }
@@ -97,38 +96,38 @@ const registerWizard = new Scenes.WizardScene(
     }
 
     await ctx.reply(
-      'Қайси маҳалла ёки овулда яшайсиз?\n\n' +
-      'Қуйидаги тугмалардан бирини босиб танланг:',
+      '🏡 Қайси маҳалла ёки овулда яшайсиз?\n\n' +
+      '👇 Қуйидаги тугмалардан бирини босиб танланг:',
       Markup.keyboard(keyboardButtons).resize().oneTime()
     );
     return ctx.wizard.next();
   },
 
-  // 3-қадам: Телефон рақам
+  // 3-қадам: Маҳаллани қабул қилиш ва телефон рақам сўраш
   async (ctx) => {
     const selectedNeighborhood = ctx.message?.text;
     if (selectedNeighborhood?.startsWith('/')) {
       return ctx.scene.leave();
     }
-    
+
     if (!selectedNeighborhood || !NEIGHBORHOODS.includes(selectedNeighborhood)) {
-      await ctx.reply('Илтимос, маҳаллангизни қуйидаги тугмалардан бирини босиб танланг!');
+      await ctx.reply('⚠️ Илтимос, маҳаллангизни қуйидаги тугмалардан бирини босиб танланг!');
       return;
     }
 
     ctx.wizard.state.data.neighborhood = selectedNeighborhood;
-    
+
     await ctx.reply(
-      'Сиз билан боғланишимиз учун телефон рақамингизни юборинг:\n\n' +
-      'Пастдаги "Телефон рақамни юбориш" тугмасини босинг ёки рақамингизни ёзиб қолдиринг (+9989X1234567):',
+      '📱 Сиз билан боғланишимиз учун телефон рақамингизни юборинг:\n\n' +
+      'Пастдаги "📱 Телефон рақамни юбориш" тугмасини босинг ёки рақамингизни ёзиб қолдиринг (+9989X1234567):',
       Markup.keyboard([
-        [Markup.button.contactRequest('Телефон рақамни юбориш')]
+        [Markup.button.contactRequest('📱 Телефон рақамни юбориш')]
       ]).resize().oneTime()
     );
     return ctx.wizard.next();
   },
 
-  // 4-қадам: Сақлаш
+  // 4-қадам: Телефон рақамини сақлаш ва Excel-га ёзиш
   async (ctx) => {
     let phone = '';
     const text = ctx.message?.text;
@@ -136,13 +135,13 @@ const registerWizard = new Scenes.WizardScene(
     if (text?.startsWith('/')) {
       return ctx.scene.leave();
     }
-    
+
     if (ctx.message?.contact?.phone_number) {
       phone = ctx.message.contact.phone_number;
     } else if (text) {
       phone = text;
     } else {
-      await ctx.reply('Илтимос, телефон рақамингизни тугма орқали юборинг ёки матн шаклида ёзиб қолдиринг.');
+      await ctx.reply('⚠️ Илтимос, телефон рақамингизни тугма орқали юборинг ёки матн шаклида ёзиб қолдиринг.');
       return;
     }
 
@@ -166,18 +165,18 @@ const registerWizard = new Scenes.WizardScene(
       await workbook.xlsx.writeFile(EXCEL_PATH);
 
       await ctx.reply(
-        'Табриклаймиз! Сўровнома муваффақиятли тўлдирилди!\n\n' +
-        'Киритилган маълумотларингиз:\n' +
-        `Исм ва Фамилия: ${ctx.wizard.state.data.name}\n` +
-        `Ёшингиз: ${ctx.wizard.state.data.age}\n` +
-        `Маҳаллангиз: ${ctx.wizard.state.data.neighborhood}\n` +
-        `Телефонингиз: ${ctx.wizard.state.data.phone}\n\n` +
-        'Сизнинг аризангиз қабул қилинди. Тез орада сиз билан боғланамиз!',
+        '🎉 Табриклаймиз! Сўровнома муваффақиятли тўлдирилди!\n\n' +
+        '📋 Киритилган маълумотларингиз:\n' +
+        `👤 Исм ва Фамилия: ${ctx.wizard.state.data.name}\n` +
+        `🎂 Ёшингиз: ${ctx.wizard.state.data.age}\n` +
+        `🏡 Маҳаллангиз: ${ctx.wizard.state.data.neighborhood}\n` +
+        `📱 Телефонингиз: ${ctx.wizard.state.data.phone}\n\n` +
+        '✨ Сизнинг аризангиз қабул қилинди. Тез орада сиз билан боғланамиз!',
         Markup.removeKeyboard()
       );
     } catch (err) {
       console.error('Excel сақлашда хатолик:', err);
-      await ctx.reply('Маълумотларни сақлашда хатолик юз берди. Илтимос, /start ни босиб қайтадан уриниб кўринг.');
+      await ctx.reply('⚠️ Маълумотларни сақлашда хатолик юз берди. Илтимос, /start ни босиб қайтадан уриниб кўринг.');
     }
 
     return ctx.scene.leave();
@@ -191,7 +190,7 @@ bot.use(session());
 
 const sendExcelFile = async (ctx) => {
   if (ctx.from.id !== ADMIN_ID) {
-    return ctx.reply('Кечирасиз, бу буйруқ фақат админ учун!');
+    return ctx.reply('⛔ Кечирасиз, бу буйруқ фақат админ учун!');
   }
 
   if (fs.existsSync(EXCEL_PATH)) {
@@ -200,11 +199,10 @@ const sendExcelFile = async (ctx) => {
       filename: 'Тахиатош_актив_волонтёрлари.xlsx'
     });
   } else {
-    await ctx.reply('Ҳозиргача ҳеч ким рўйхатдан ўтмаган.');
+    await ctx.reply('📭 Ҳозиргача ҳеч ким рўйхатдан ўтмаган.');
   }
 };
 
-// Командаларга биринчи ишлов бериш
 bot.command('export', async (ctx) => {
   if (ctx.scene) await ctx.scene.leave();
   await sendExcelFile(ctx);
@@ -212,30 +210,30 @@ bot.command('export', async (ctx) => {
 
 bot.command('admin', async (ctx) => {
   if (ctx.from.id !== ADMIN_ID) {
-    return ctx.reply('Кечирасиз, бу буйруқ фақат админ учун!');
+    return ctx.reply('⛔ Кечирасиз, бу буйруқ фақат админ учун!');
   }
   if (ctx.scene) await ctx.scene.leave();
   await ctx.reply(
-    'Админ панели:\n\n' +
+    '⚙️ Админ панели:\n\n' +
     'Барча йиғилган волонтёрлар рўйхатини .xlsx файлида олиш учун пастдаги тугмани босинг:',
     Markup.keyboard([
-      ['Excel базани юклаб олиш']
+      ['📊 Excel базани юклаб олиш']
     ]).resize()
   );
 });
 
-bot.hears('Excel базани юклаб олиш', sendExcelFile);
+bot.hears('📊 Excel базани юклаб олиш', sendExcelFile);
 
 bot.use(stage.middleware());
 
-// /start
+// /start командаси
 bot.start(async (ctx) => {
   try {
     await initExcel();
-    await ctx.scene.leave();
+    if (ctx.scene) await ctx.scene.leave();
     await ctx.reply(
-      'Ассалому алайкум! Тахиатош тумани волонтёрлари сафига хуш келибсиз!\n\n' +
-      'Илтимос, Исм ва Фамилиянгизни киритинг:\n' +
+      '🌟 Ассалому алайкум! Тахиатош тумани волонтёрлари сафига хуш келибсиз!\n\n' +
+      '👤 Илтимос, Исм ва Фамилиянгизни киритинг:\n' +
       '(Масалан: Жасур Уразбаев)'
     );
     await ctx.scene.enter('REGISTER_WIZARD');
@@ -253,6 +251,7 @@ initExcel().then(() => {
   console.log('Бот муваффақиятли ишга тушди!');
 });
 
+// Render платформасида порт хатолигининг олдини олиш учун мини веб-сервер
 const PORT = process.env.PORT || 10000;
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
