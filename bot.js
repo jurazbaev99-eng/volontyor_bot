@@ -45,6 +45,7 @@ async function initExcel() {
   }
 }
 
+// Рўйхатдан ўтиш сўровномаси (Wizard Scene)
 const registerWizard = new Scenes.WizardScene(
   'REGISTER_WIZARD',
   
@@ -63,7 +64,13 @@ const registerWizard = new Scenes.WizardScene(
   async (ctx) => {
     const text = ctx.message?.text;
     
-    if (!text || text.startsWith('/')) {
+    // Агар команда киритилса, сўровномадан чиқиб кетиш
+    if (text?.startsWith('/')) {
+      await ctx.scene.leave();
+      return;
+    }
+
+    if (!text) {
       await ctx.reply('Илтимос, исм ва фамилиянгизни тўлиқ матн кўринишида киритинг!\n\nМасалан: Жасур Уразбаев');
       return;
     }
@@ -78,7 +85,13 @@ const registerWizard = new Scenes.WizardScene(
 
   // 3-қадам: Маҳалла
   async (ctx) => {
-    const age = parseInt(ctx.message?.text, 10);
+    const text = ctx.message?.text;
+    if (text?.startsWith('/')) {
+      await ctx.scene.leave();
+      return;
+    }
+
+    const age = parseInt(text, 10);
     if (isNaN(age) || age < 14 || age > 30) {
       await ctx.reply(
         'Кечирасиз! Волонтёрлик сўровномасида фақат 14 дан 30 ёшгача бўлган ёшлар қатнаша олади.\n\n' +
@@ -106,6 +119,10 @@ const registerWizard = new Scenes.WizardScene(
   // 4-қадам: Телефон рақам
   async (ctx) => {
     const selectedNeighborhood = ctx.message?.text;
+    if (selectedNeighborhood?.startsWith('/')) {
+      await ctx.scene.leave();
+      return;
+    }
     
     if (!selectedNeighborhood || !NEIGHBORHOODS.includes(selectedNeighborhood)) {
       await ctx.reply('Илтимос, маҳаллангизни қуйидаги тугмалардан бирини босиб танланг!');
@@ -127,11 +144,17 @@ const registerWizard = new Scenes.WizardScene(
   // 5-қадам: Сақлаш
   async (ctx) => {
     let phone = '';
+    const text = ctx.message?.text;
+
+    if (text?.startsWith('/')) {
+      await ctx.scene.leave();
+      return;
+    }
     
     if (ctx.message?.contact?.phone_number) {
       phone = ctx.message.contact.phone_number;
-    } else if (ctx.message?.text && !ctx.message.text.startsWith('/')) {
-      phone = ctx.message.text;
+    } else if (text) {
+      phone = text;
     } else {
       await ctx.reply('Илтимос, телефон рақамингизни тугма орқали юборинг ёки матн шаклида ёзиб қолдиринг.');
       return;
@@ -179,32 +202,8 @@ const bot = new Telegraf(BOT_TOKEN);
 const stage = new Scenes.Stage([registerWizard]);
 
 bot.use(session());
-bot.use(stage.middleware());
 
-bot.start(async (ctx) => {
-  try {
-    await initExcel();
-    await ctx.scene.leave();
-    await ctx.scene.enter('REGISTER_WIZARD');
-  } catch (err) {
-    console.error('/start хатолиги:', err);
-  }
-});
-
-bot.command('admin', async (ctx) => {
-  if (ctx.from.id !== ADMIN_ID) {
-    return ctx.reply('Кечирасиз, бу буйруқ фақат админ учун!');
-  }
-
-  await ctx.reply(
-    'Админ панели:\n\n' +
-    'Барча йиғилган волонтёрлар рўйхатини .xlsx файлида олиш учун пастдаги тугмани босинг:',
-    Markup.keyboard([
-      ['Excel базани юклаб олиш']
-    ]).resize()
-  );
-});
-
+// Сценариядан ташқари командаларни биринчи ушлаш
 const sendExcelFile = async (ctx) => {
   if (ctx.from.id !== ADMIN_ID) {
     return ctx.reply('Кечирасиз, бу буйруқ фақат админ учун!');
@@ -220,8 +219,38 @@ const sendExcelFile = async (ctx) => {
   }
 };
 
-bot.command('export', sendExcelFile);
+bot.command('export', async (ctx) => {
+  await ctx.scene.leave();
+  await sendExcelFile(ctx);
+});
+
+bot.command('admin', async (ctx) => {
+  if (ctx.from.id !== ADMIN_ID) {
+    return ctx.reply('Кечирасиз, бу буйруқ фақат админ учун!');
+  }
+  await ctx.scene.leave();
+  await ctx.reply(
+    'Админ панели:\n\n' +
+    'Барча йиғилган волонтёрлар рўйхатини .xlsx файлида олиш учун пастдаги тугмани босинг:',
+    Markup.keyboard([
+      ['Excel базани юклаб олиш']
+    ]).resize()
+  );
+});
+
 bot.hears('Excel базани юклаб олиш', sendExcelFile);
+
+bot.use(stage.middleware());
+
+bot.start(async (ctx) => {
+  try {
+    await initExcel();
+    await ctx.scene.leave();
+    await ctx.scene.enter('REGISTER_WIZARD');
+  } catch (err) {
+    console.error('/start хатолиги:', err);
+  }
+});
 
 bot.catch((err, ctx) => {
   console.error(`Бот хатолиги [${ctx.updateType}]:`, err);
