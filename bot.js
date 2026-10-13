@@ -2,6 +2,7 @@ const { Telegraf, Scenes, session, Markup } = require('telegraf');
 const ExcelJS = require('exceljs');
 const fs = require('fs');
 const path = require('path');
+const http = require('http'); // Render порт хатолигини ҳал қилиш учун
 
 const BOT_TOKEN = '8913247281:AAGUGFSiQyKc4qPipaB2BGU_l4PXamNbDQ0';
 const ADMIN_ID = 7470599966;
@@ -64,7 +65,6 @@ const registerWizard = new Scenes.WizardScene(
   async (ctx) => {
     const text = ctx.message?.text;
     
-    // Агар команда киритилса, сўровномадан чиқиб кетиш
     if (text?.startsWith('/')) {
       await ctx.scene.leave();
       return;
@@ -203,7 +203,6 @@ const stage = new Scenes.Stage([registerWizard]);
 
 bot.use(session());
 
-// Сценариядан ташқари командаларни биринчи ушлаш
 const sendExcelFile = async (ctx) => {
   if (ctx.from.id !== ADMIN_ID) {
     return ctx.reply('Кечирасиз, бу буйруқ фақат админ учун!');
@@ -259,6 +258,15 @@ bot.catch((err, ctx) => {
 initExcel().then(() => {
   bot.launch();
   console.log('Бот муваффақиятли ишга тушди!');
+});
+
+// Render платформасидаги порт хатолигини бартараф этиш учун мини веб-сервер
+const PORT = process.env.PORT || 10000;
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Volontyor bot is running 24/7!');
+}).listen(PORT, () => {
+  console.log(`Сервер ${PORT}-портда муваффақиятли ишга тушди.`);
 });
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
