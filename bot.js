@@ -1,4 +1,4 @@
-const { Telegraf, Scenes, session, Markup } = require('telegraf');
+const { Telegraf, session, Markup } = require('telegraf');
 const ExcelJS = require('exceljs');
 const fs = require('fs');
 const path = require('path');
@@ -46,148 +46,11 @@ async function initExcel() {
   }
 }
 
-// Босқичма-босқич рўйхатдан ўтиш сценарийси
-const registerWizard = new Scenes.WizardScene(
-  'REGISTER_WIZARD',
-
-  // 1-қадам: Исм-фамилияни қабул қилиш ва ёшни сўраш
-  async (ctx) => {
-    const text = ctx.message?.text;
-
-    if (text?.startsWith('/')) {
-      return ctx.scene.leave();
-    }
-
-    if (!text) {
-      await ctx.reply('Илтимос, исм ва фамилиянгизни тўлиқ матн кўринишида киритинг!\n\nМасалан: Жасур Уразбаев');
-      return;
-    }
-
-    ctx.wizard.state.data = { name: text };
-    await ctx.reply(
-      `Хурсандмиз, ${text}!\n\n` +
-      '🎂 Ёшингизни киритинг (волонтёрлик учун 14 дан 30 ёшгача бўлиши керак):'
-    );
-    return ctx.wizard.next();
-  },
-
-  // 2-қадам: Ёшни қабул қилиш ва маҳаллани сўраш
-  async (ctx) => {
-    const text = ctx.message?.text;
-    if (text?.startsWith('/')) {
-      return ctx.scene.leave();
-    }
-
-    const age = parseInt(text, 10);
-    if (isNaN(age) || age < 14 || age > 30) {
-      await ctx.reply(
-        '🚫 Кечирасиз! Волонтёрлик сўровномасида фақат 14 дан 30 ёшгача бўлган ёшлар қатнаша олади.\n\n' +
-        '🔢 Илтимос, ёшингизни рақамларда тўғри киритинг (14-30):'
-      );
-      return;
-    }
-    ctx.wizard.state.data.age = age;
-
-    const keyboardButtons = [];
-    for (let i = 0; i < NEIGHBORHOODS.length; i += 2) {
-      const row = [NEIGHBORHOODS[i]];
-      if (NEIGHBORHOODS[i + 1]) row.push(NEIGHBORHOODS[i + 1]);
-      keyboardButtons.push(row);
-    }
-
-    await ctx.reply(
-      '🏡 Қайси маҳалла ёки овулда яшайсиз?\n\n' +
-      '👇 Қуйидаги тугмалардан бирини босиб танланг:',
-      Markup.keyboard(keyboardButtons).resize().oneTime()
-    );
-    return ctx.wizard.next();
-  },
-
-  // 3-қадам: Маҳаллани қабул қилиш ва телефон рақам сўраш
-  async (ctx) => {
-    const selectedNeighborhood = ctx.message?.text;
-    if (selectedNeighborhood?.startsWith('/')) {
-      return ctx.scene.leave();
-    }
-
-    if (!selectedNeighborhood || !NEIGHBORHOODS.includes(selectedNeighborhood)) {
-      await ctx.reply('⚠️ Илтимос, маҳаллангизни қуйидаги тугмалардан бирини босиб танланг!');
-      return;
-    }
-
-    ctx.wizard.state.data.neighborhood = selectedNeighborhood;
-
-    await ctx.reply(
-      '📱 Сиз билан боғланишимиз учун телефон рақамингизни юборинг:\n\n' +
-      'Пастдаги "📱 Телефон рақамни юбориш" тугмасини босинг ёки рақамингизни ёзиб қолдиринг (+9989X1234567):',
-      Markup.keyboard([
-        [Markup.button.contactRequest('📱 Телефон рақамни юбориш')]
-      ]).resize().oneTime()
-    );
-    return ctx.wizard.next();
-  },
-
-  // 4-қадам: Телефон рақамини сақлаш ва Excel-га ёзиш
-  async (ctx) => {
-    let phone = '';
-    const text = ctx.message?.text;
-
-    if (text?.startsWith('/')) {
-      return ctx.scene.leave();
-    }
-
-    if (ctx.message?.contact?.phone_number) {
-      phone = ctx.message.contact.phone_number;
-    } else if (text) {
-      phone = text;
-    } else {
-      await ctx.reply('⚠️ Илтимос, телефон рақамингизни тугма орқали юборинг ёки матн шаклида ёзиб қолдиринг.');
-      return;
-    }
-
-    ctx.wizard.state.data.phone = phone;
-
-    try {
-      await initExcel();
-      const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.readFile(EXCEL_PATH);
-      const worksheet = workbook.getWorksheet('Волонтёрлар');
-
-      worksheet.addRow([
-        ctx.from.id,
-        ctx.wizard.state.data.name,
-        ctx.wizard.state.data.age,
-        ctx.wizard.state.data.neighborhood,
-        ctx.wizard.state.data.phone,
-        new Date().toLocaleString('uz-UZ')
-      ]);
-
-      await workbook.xlsx.writeFile(EXCEL_PATH);
-
-      await ctx.reply(
-        '🎉 Табриклаймиз! Сўровнома муваффақиятли тўлдирилди!\n\n' +
-        '📋 Киритилган маълумотларингиз:\n' +
-        `👤 Исм ва Фамилия: ${ctx.wizard.state.data.name}\n` +
-        `🎂 Ёшингиз: ${ctx.wizard.state.data.age}\n` +
-        `🏡 Маҳаллангиз: ${ctx.wizard.state.data.neighborhood}\n` +
-        `📱 Телефонингиз: ${ctx.wizard.state.data.phone}\n\n` +
-        '✨ Сизнинг аризангиз қабул қилинди. Тез орада сиз билан боғланамиз!',
-        Markup.removeKeyboard()
-      );
-    } catch (err) {
-      console.error('Excel сақлашда хатолик:', err);
-      await ctx.reply('⚠️ Маълумотларни сақлашда хатолик юз берди. Илтимос, /start ни босиб қайтадан уриниб кўринг.');
-    }
-
-    return ctx.scene.leave();
-  }
-);
-
 const bot = new Telegraf(BOT_TOKEN);
-const stage = new Scenes.Stage([registerWizard]);
 
 bot.use(session());
 
+// Админ буйруқлари
 const sendExcelFile = async (ctx) => {
   if (ctx.from.id !== ADMIN_ID) {
     return ctx.reply('⛔ Кечирасиз, бу буйруқ фақат админ учун!');
@@ -203,16 +66,13 @@ const sendExcelFile = async (ctx) => {
   }
 };
 
-bot.command('export', async (ctx) => {
-  if (ctx.scene) await ctx.scene.leave();
-  await sendExcelFile(ctx);
-});
+bot.command('export', sendExcelFile);
+bot.hears('📊 Excel базани юклаб олиш', sendExcelFile);
 
 bot.command('admin', async (ctx) => {
   if (ctx.from.id !== ADMIN_ID) {
     return ctx.reply('⛔ Кечирасиз, бу буйруқ фақат админ учун!');
   }
-  if (ctx.scene) await ctx.scene.leave();
   await ctx.reply(
     '⚙️ Админ панели:\n\n' +
     'Барча йиғилган волонтёрлар рўйхатини .xlsx файлида олиш учун пастдаги тугмани босинг:',
@@ -222,23 +82,134 @@ bot.command('admin', async (ctx) => {
   );
 });
 
-bot.hears('📊 Excel базани юклаб олиш', sendExcelFile);
-
-bot.use(stage.middleware());
-
 // /start командаси
 bot.start(async (ctx) => {
-  try {
-    await initExcel();
-    if (ctx.scene) await ctx.scene.leave();
-    await ctx.reply(
-      '🌟 Ассалому алайкум! Тахиатош тумани волонтёрлари сафига хуш келибсиз!\n\n' +
-      '👤 Илтимос, Исм ва Фамилиянгизни киритинг:\n' +
-      '(Масалан: Жасур Уразбаев)'
+  await initExcel();
+  ctx.session = { step: 'NAME', data: {} };
+  
+  await ctx.reply(
+    '🌟 Ассалому алайкум! Тахиатош тумани волонтёрлари сафига хуш келибсиз!\n\n' +
+    '👤 Илтимос, Исм ва Фамилиянгизни киритинг:\n' +
+    '(Масалан: Жасур Уразбаев)',
+    Markup.removeKeyboard()
+  );
+});
+
+// Барча хабарларни босқичма-босқич ушлаш
+bot.on('message', async (ctx) => {
+  if (!ctx.session || !ctx.session.step) {
+    ctx.session = { step: 'NAME', data: {} };
+  }
+
+  const text = ctx.message?.text;
+
+  // 1-БОСҚИЧ: Исм ва Фамилия
+  if (ctx.session.step === 'NAME') {
+    if (!text || text.startsWith('/')) {
+      return ctx.reply('⚠️ Илтимос, исм ва фамилиянгизни матн шаклида киритинг!\n\nМасалан: Жасур Уразбаев');
+    }
+
+    ctx.session.data.name = text;
+    ctx.session.step = 'AGE';
+
+    return ctx.reply(
+      `Хурсандмиз, ${text}! 😊\n\n` +
+      '🎂 Ёшингизни киритинг (волонтёрлик учун 14 дан 30 ёшгача бўлиши керак):'
     );
-    await ctx.scene.enter('REGISTER_WIZARD');
-  } catch (err) {
-    console.error('/start хатолиги:', err);
+  }
+
+  // 2-БОСҚИЧ: Ёш
+  if (ctx.session.step === 'AGE') {
+    const age = parseInt(text, 10);
+    if (isNaN(age) || age < 14 || age > 30) {
+      return ctx.reply(
+        '🚫 Кечирасиз! Волонтёрлик сўровномасида фақат 14 дан 30 ёшгача бўлган ёшлар қатнаша олади.\n\n' +
+        '🔢 Илтимос, ёшингизни рақамларда тўғри киритинг (14-30):'
+      );
+    }
+
+    ctx.session.data.age = age;
+    ctx.session.step = 'NEIGHBORHOOD';
+
+    const keyboardButtons = [];
+    for (let i = 0; i < NEIGHBORHOODS.length; i += 2) {
+      const row = [NEIGHBORHOODS[i]];
+      if (NEIGHBORHOODS[i + 1]) row.push(NEIGHBORHOODS[i + 1]);
+      keyboardButtons.push(row);
+    }
+
+    return ctx.reply(
+      '🏡 Қайси маҳалла ёки овулда яшайсиз?\n\n' +
+      '👇 Қуйидаги тугмалардан бирини босиб танланг:',
+      Markup.keyboard(keyboardButtons).resize().oneTime()
+    );
+  }
+
+  // 3-БОСҚИЧ: Маҳалла
+  if (ctx.session.step === 'NEIGHBORHOOD') {
+    if (!text || !NEIGHBORHOODS.includes(text)) {
+      return ctx.reply('⚠️ Илтимос, маҳаллангизни пастдаги тугмалардан бирини босиб танланг!');
+    }
+
+    ctx.session.data.neighborhood = text;
+    ctx.session.step = 'PHONE';
+
+    return ctx.reply(
+      '📱 Сиз билан боғланишимиз учун телефон рақамингизни юборинг:\n\n' +
+      'Пастдаги "📱 Телефон рақамни юбориш" тугмасини босинг ёки рақамингизни ёзиб қолдиринг (+9989X1234567):',
+      Markup.keyboard([
+        [Markup.button.contactRequest('📱 Телефон рақамни юбориш')]
+      ]).resize().oneTime()
+    );
+  }
+
+  // 4-БОСҚИЧ: Телефон ва Сақлаш
+  if (ctx.session.step === 'PHONE') {
+    let phone = '';
+
+    if (ctx.message?.contact?.phone_number) {
+      phone = ctx.message.contact.phone_number;
+    } else if (text && !text.startsWith('/')) {
+      phone = text;
+    } else {
+      return ctx.reply('⚠️ Илтимос, телефон рақамингизни тугма орқали юборинг ёки матн шаклида ёзиб қолдиринг.');
+    }
+
+    ctx.session.data.phone = phone;
+
+    try {
+      await initExcel();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(EXCEL_PATH);
+      const worksheet = workbook.getWorksheet('Волонтёрлар');
+
+      worksheet.addRow([
+        ctx.from.id,
+        ctx.session.data.name,
+        ctx.session.data.age,
+        ctx.session.data.neighborhood,
+        ctx.session.data.phone,
+        new Date().toLocaleString('uz-UZ')
+      ]);
+
+      await workbook.xlsx.writeFile(EXCEL_PATH);
+
+      await ctx.reply(
+        '🎉 Табриклаймиз! Сўровнома муваффақиятли тўлдирилди!\n\n' +
+        '📋 Киритилган маълумотларингиз:\n' +
+        `👤 Исм ва Фамилия: ${ctx.session.data.name}\n` +
+        `🎂 Ёшингиз: ${ctx.session.data.age}\n` +
+        `🏡 Маҳаллангиз: ${ctx.session.data.neighborhood}\n` +
+        `📱 Телефонингиз: ${ctx.session.data.phone}\n\n` +
+        '✨ Сизнинг аризангиз қабул қилинди. Тез орада сиз билан боғланамиз!',
+        Markup.removeKeyboard()
+      );
+
+      ctx.session = null; // Сценарийни якунлаш
+    } catch (err) {
+      console.error('Excel сақлашда хатолик:', err);
+      await ctx.reply('⚠️ Маълумотларни сақлашда хатолик юз берди. Илтимос, /start ни босиб қайтадан уриниб кўринг.');
+    }
   }
 });
 
@@ -251,7 +222,7 @@ initExcel().then(() => {
   console.log('Бот муваффақиятли ишга тушди!');
 });
 
-// Render платформасида порт хатолигининг олдини олиш учун мини веб-сервер
+// Render учун веб-сервер
 const PORT = process.env.PORT || 10000;
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
