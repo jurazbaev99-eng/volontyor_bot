@@ -2,7 +2,7 @@ const { Telegraf, Scenes, session, Markup } = require('telegraf');
 const ExcelJS = require('exceljs');
 const fs = require('fs');
 const path = require('path');
-const http = require('http'); // Render порт хатолигини ҳал қилиш учун
+const http = require('http');
 
 const BOT_TOKEN = '8913247281:AAGUGFSiQyKc4qPipaB2BGU_l4PXamNbDQ0';
 const ADMIN_ID = 7470599966;
@@ -46,28 +46,17 @@ async function initExcel() {
   }
 }
 
-// Рўйхатдан ўтиш сўровномаси (Wizard Scene)
+// Рўйхатдан ўтиш сўровномаси
 const registerWizard = new Scenes.WizardScene(
   'REGISTER_WIZARD',
   
-  // 1-қадам: Исм-фамилия
-  async (ctx) => {
-    ctx.wizard.state.data = {};
-    await ctx.reply(
-      'Ассалому алайкум! Тахиатош тумани волонтёрлари сафига хуш келибсиз!\n\n' +
-      'Илтимос, Исм ва Фамилиянгизни киритинг:\n' +
-      '(Масалан: Жасур Уразбаев)'
-    );
-    return ctx.wizard.next();
-  },
-
-  // 2-қадам: Ёш
+  // 1-қадам: Исм-фамилияни қабул қилиш
   async (ctx) => {
     const text = ctx.message?.text;
     
+    // Агар буйруқ юборилса, сценарийдан чиқамиз
     if (text?.startsWith('/')) {
-      await ctx.scene.leave();
-      return;
+      return ctx.scene.leave();
     }
 
     if (!text) {
@@ -75,7 +64,7 @@ const registerWizard = new Scenes.WizardScene(
       return;
     }
 
-    ctx.wizard.state.data.name = text;
+    ctx.wizard.state.data = { name: text };
     await ctx.reply(
       `Хурсандмиз, ${text}!\n\n` +
       'Ёшингизни киритинг (волонтёрлик учун 14 дан 30 ёшгача бўлиши керак):'
@@ -83,12 +72,11 @@ const registerWizard = new Scenes.WizardScene(
     return ctx.wizard.next();
   },
 
-  // 3-қадам: Маҳалла
+  // 2-қадам: Ёш
   async (ctx) => {
     const text = ctx.message?.text;
     if (text?.startsWith('/')) {
-      await ctx.scene.leave();
-      return;
+      return ctx.scene.leave();
     }
 
     const age = parseInt(text, 10);
@@ -116,12 +104,11 @@ const registerWizard = new Scenes.WizardScene(
     return ctx.wizard.next();
   },
 
-  // 4-қадам: Телефон рақам
+  // 3-қадам: Телефон рақам
   async (ctx) => {
     const selectedNeighborhood = ctx.message?.text;
     if (selectedNeighborhood?.startsWith('/')) {
-      await ctx.scene.leave();
-      return;
+      return ctx.scene.leave();
     }
     
     if (!selectedNeighborhood || !NEIGHBORHOODS.includes(selectedNeighborhood)) {
@@ -141,14 +128,13 @@ const registerWizard = new Scenes.WizardScene(
     return ctx.wizard.next();
   },
 
-  // 5-қадам: Сақлаш
+  // 4-қадам: Сақлаш
   async (ctx) => {
     let phone = '';
     const text = ctx.message?.text;
 
     if (text?.startsWith('/')) {
-      await ctx.scene.leave();
-      return;
+      return ctx.scene.leave();
     }
     
     if (ctx.message?.contact?.phone_number) {
@@ -218,8 +204,9 @@ const sendExcelFile = async (ctx) => {
   }
 };
 
+// Командаларга биринчи ишлов бериш
 bot.command('export', async (ctx) => {
-  await ctx.scene.leave();
+  if (ctx.scene) await ctx.scene.leave();
   await sendExcelFile(ctx);
 });
 
@@ -227,7 +214,7 @@ bot.command('admin', async (ctx) => {
   if (ctx.from.id !== ADMIN_ID) {
     return ctx.reply('Кечирасиз, бу буйруқ фақат админ учун!');
   }
-  await ctx.scene.leave();
+  if (ctx.scene) await ctx.scene.leave();
   await ctx.reply(
     'Админ панели:\n\n' +
     'Барча йиғилган волонтёрлар рўйхатини .xlsx файлида олиш учун пастдаги тугмани босинг:',
@@ -241,10 +228,16 @@ bot.hears('Excel базани юклаб олиш', sendExcelFile);
 
 bot.use(stage.middleware());
 
+// /start
 bot.start(async (ctx) => {
   try {
     await initExcel();
     await ctx.scene.leave();
+    await ctx.reply(
+      'Ассалому алайкум! Тахиатош тумани волонтёрлари сафига хуш келибсиз!\n\n' +
+      'Илтимос, Исм ва Фамилиянгизни киритинг:\n' +
+      '(Масалан: Жасур Уразбаев)'
+    );
     await ctx.scene.enter('REGISTER_WIZARD');
   } catch (err) {
     console.error('/start хатолиги:', err);
@@ -260,7 +253,6 @@ initExcel().then(() => {
   console.log('Бот муваффақиятли ишга тушди!');
 });
 
-// Render платформасидаги порт хатолигини бартараф этиш учун мини веб-сервер
 const PORT = process.env.PORT || 10000;
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
