@@ -1,4 +1,4 @@
-const { Telegraf, session, Markup } = require('telegraf');
+const { Telegraf, Markup } = require('telegraf');
 const ExcelJS = require('exceljs');
 const fs = require('fs');
 const path = require('path');
@@ -26,6 +26,9 @@ const NEIGHBORHOODS = [
   'Марказий МФЙ'
 ];
 
+// Фойдаланувчилар хотираси (Сессия)
+const userState = {};
+
 async function initExcel() {
   try {
     if (!fs.existsSync(EXCEL_PATH)) {
@@ -48,9 +51,7 @@ async function initExcel() {
 
 const bot = new Telegraf(BOT_TOKEN);
 
-bot.use(session());
-
-// Админ буйруқлари
+// Админ учун Excel юклаб олиш
 const sendExcelFile = async (ctx) => {
   if (ctx.from.id !== ADMIN_ID) {
     return ctx.reply('⛔ Кечирасиз, бу буйруқ фақат админ учун!');
@@ -82,11 +83,12 @@ bot.command('admin', async (ctx) => {
   );
 });
 
-// /start командаси
+// /start буйруғи
 bot.start(async (ctx) => {
   await initExcel();
-  ctx.session = { step: 'NAME', data: {} };
-  
+  const userId = ctx.from.id;
+  userState[userId] = { step: 'NAME', data: {} };
+
   await ctx.reply(
     '🌟 Ассалому алайкум! Тахиатош тумани волонтёрлари сафига хуш келибсиз!\n\n' +
     '👤 Илтимос, Исм ва Фамилиянгизни киритинг:\n' +
@@ -95,22 +97,31 @@ bot.start(async (ctx) => {
   );
 });
 
-// Барча хабарларни босқичма-босқич ушлаш
+// Барча хабарларга кетма-кет ишлов бериш
 bot.on('message', async (ctx) => {
-  if (!ctx.session || !ctx.session.step) {
-    ctx.session = { step: 'NAME', data: {} };
-  }
-
+  const userId = ctx.from.id;
   const text = ctx.message?.text;
 
+  // Агар команда ёзилса ёки сессия бўлмаса
+  if (text?.startsWith('/')) return;
+
+  if (!userState[userId]) {
+    userState[userId] = { step: 'NAME', data: {} };
+    return ctx.reply(
+      '🌟 Илтимос, сўровномани бошлаш учун Исм ва Фамилиянгизни киритинг:\n(Масалан: Жасур Уразбаев)'
+    );
+  }
+
+  const state = userState[userId];
+
   // 1-БОСҚИЧ: Исм ва Фамилия
-  if (ctx.session.step === 'NAME') {
-    if (!text || text.startsWith('/')) {
+  if (state.step === 'NAME') {
+    if (!text) {
       return ctx.reply('⚠️ Илтимос, исм ва фамилиянгизни матн шаклида киритинг!\n\nМасалан: Жасур Уразбаев');
     }
 
-    ctx.session.data.name = text;
-    ctx.session.step = 'AGE';
+    state.data.name = text;
+    state.step = 'AGE';
 
     return ctx.reply(
       `Хурсандмиз, ${text}! 😊\n\n` +
@@ -119,7 +130,7 @@ bot.on('message', async (ctx) => {
   }
 
   // 2-БОСҚИЧ: Ёш
-  if (ctx.session.step === 'AGE') {
+  if (state.step === 'AGE') {
     const age = parseInt(text, 10);
     if (isNaN(age) || age < 14 || age > 30) {
       return ctx.reply(
@@ -128,8 +139,8 @@ bot.on('message', async (ctx) => {
       );
     }
 
-    ctx.session.data.age = age;
-    ctx.session.step = 'NEIGHBORHOOD';
+    state.data.age = age;
+    state.step = 'NEIGHBORHOOD';
 
     const keyboardButtons = [];
     for (let i = 0; i < NEIGHBORHOODS.length; i += 2) {
@@ -146,13 +157,13 @@ bot.on('message', async (ctx) => {
   }
 
   // 3-БОСҚИЧ: Маҳалла
-  if (ctx.session.step === 'NEIGHBORHOOD') {
+  if (state.step === 'NEIGHBORHOOD') {
     if (!text || !NEIGHBORHOODS.includes(text)) {
       return ctx.reply('⚠️ Илтимос, маҳаллангизни пастдаги тугмалардан бирини босиб танланг!');
     }
 
-    ctx.session.data.neighborhood = text;
-    ctx.session.step = 'PHONE';
+    state.data.neighborhood = text;
+    state.step = 'PHONE';
 
     return ctx.reply(
       '📱 Сиз билан боғланишимиз учун телефон рақамингизни юборинг:\n\n' +
@@ -163,19 +174,19 @@ bot.on('message', async (ctx) => {
     );
   }
 
-  // 4-БОСҚИЧ: Телефон ва Сақлаш
-  if (ctx.session.step === 'PHONE') {
+  // 4-БОСҚИЧ: Телефон рақам ва Excel-га сақлаш
+  if (state.step === 'PHONE') {
     let phone = '';
 
     if (ctx.message?.contact?.phone_number) {
       phone = ctx.message.contact.phone_number;
-    } else if (text && !text.startsWith('/')) {
+    } else if (text) {
       phone = text;
     } else {
       return ctx.reply('⚠️ Илтимос, телефон рақамингизни тугма орқали юборинг ёки матн шаклида ёзиб қолдиринг.');
     }
 
-    ctx.session.data.phone = phone;
+    state.data.phone = phone;
 
     try {
       await initExcel();
@@ -184,11 +195,11 @@ bot.on('message', async (ctx) => {
       const worksheet = workbook.getWorksheet('Волонтёрлар');
 
       worksheet.addRow([
-        ctx.from.id,
-        ctx.session.data.name,
-        ctx.session.data.age,
-        ctx.session.data.neighborhood,
-        ctx.session.data.phone,
+        userId,
+        state.data.name,
+        state.data.age,
+        state.data.neighborhood,
+        state.data.phone,
         new Date().toLocaleString('uz-UZ')
       ]);
 
@@ -197,15 +208,15 @@ bot.on('message', async (ctx) => {
       await ctx.reply(
         '🎉 Табриклаймиз! Сўровнома муваффақиятли тўлдирилди!\n\n' +
         '📋 Киритилган маълумотларингиз:\n' +
-        `👤 Исм ва Фамилия: ${ctx.session.data.name}\n` +
-        `🎂 Ёшингиз: ${ctx.session.data.age}\n` +
-        `🏡 Маҳаллангиз: ${ctx.session.data.neighborhood}\n` +
-        `📱 Телефонингиз: ${ctx.session.data.phone}\n\n` +
+        `👤 Исм ва Фамилия: ${state.data.name}\n` +
+        `🎂 Ёшингиз: ${state.data.age}\n` +
+        `🏡 Маҳаллангиз: ${state.data.neighborhood}\n` +
+        `📱 Телефонингиз: ${state.data.phone}\n\n` +
         '✨ Сизнинг аризангиз қабул қилинди. Тез орада сиз билан боғланамиз!',
         Markup.removeKeyboard()
       );
 
-      ctx.session = null; // Сценарийни якунлаш
+      delete userState[userId];
     } catch (err) {
       console.error('Excel сақлашда хатолик:', err);
       await ctx.reply('⚠️ Маълумотларни сақлашда хатолик юз берди. Илтимос, /start ни босиб қайтадан уриниб кўринг.');
@@ -213,8 +224,8 @@ bot.on('message', async (ctx) => {
   }
 });
 
-bot.catch((err, ctx) => {
-  console.error(`Бот хатолиги [${ctx.updateType}]:`, err);
+bot.catch((err) => {
+  console.error('Бот хатолиги:', err);
 });
 
 initExcel().then(() => {
